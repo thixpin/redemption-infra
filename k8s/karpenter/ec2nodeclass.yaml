@@ -1,0 +1,24 @@
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: default
+spec:
+  amiFamily: AL2023
+  amiSelectorTerms:
+    - alias: al2023@latest
+  role: "redemption-prod-karpenter-node"   # created by the Karpenter TF module
+  # Discover subnets/SGs by the tag Terraform applies (karpenter.sh/discovery).
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: redemption-prod
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: redemption-prod
+  metadataOptions:
+    httpTokens: required          # enforce IMDSv2
+  blockDeviceMappings:
+    - deviceName: /dev/xvda
+      ebs:
+        volumeSize: 30Gi
+        volumeType: gp3
+        encrypted: true

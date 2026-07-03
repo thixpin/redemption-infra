@@ -90,4 +90,11 @@ aws iam put-role-policy \
   --policy-document file://github-actions-policy.json
 ```
 
+## 5. Connect kubectl and sanity-check the cluster
 
+```bash
+$(terraform output -raw configure_kubectl)
+kubectl get nodes
+kubectl get pods -A    
+
+kubectl apply -f k8s/karpenter/
