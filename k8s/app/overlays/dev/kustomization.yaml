@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+patches:
+  - path: ingress-patch.yaml
+  - path: deployment-patch.yaml
+  - path: hpa-patch.yaml
+  - path: serviceaccount-patch.yaml
+
+# Image tag is written here by the app repo's CI on each main build (immutable
+# git SHA). ArgoCD syncs the change and rolls the Deployment. The "bootstrap"
+# value below is a placeholder until the first CI build lands a real SHA.
+images:
+  - name: 801100257021.dkr.ecr.ap-southeast-1.amazonaws.com/redemption/redemption-api
+    newTag: bootstrap

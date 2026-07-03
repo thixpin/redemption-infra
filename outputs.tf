@@ -40,3 +40,8 @@ output "db_secret_arn" {
   description = "Secrets Manager ARN consumed by External Secrets"
   value       = aws_secretsmanager_secret.db.arn
 }
+
+output "app_secrets_irsa_role_arn" {
+  description = "Annotate the redemption-secretstore ServiceAccount with this"
+  value       = module.app_secrets_irsa.iam_role_arn
+}

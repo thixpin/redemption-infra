@@ -143,7 +143,10 @@ module "rds_proxy" {
       description = "Redemption DB credentials"
       auth_scheme = "SECRETS"
       secret_arn  = aws_secretsmanager_secret.db.arn
-      iam_auth    = "REQUIRED"
+      # The app authenticates with the DB username/password from Secrets Manager.
+      # IAM auth would require the app to mint an rds-db auth token per connection;
+      # the current app doesn't, so keep password auth. TLS stays required below.
+      iam_auth = "DISABLED"
     }
   }
 

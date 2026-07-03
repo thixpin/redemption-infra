@@ -48,7 +48,7 @@ cat <<EOT > github-actions-trust-policy.json
       "Condition": {
         "StringEquals": {
           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-          "token.actions.githubusercontent.com:sub": "repo:thixpin/redemption-app:ref:refs/heads/develop"
+          "token.actions.githubusercontent.com:sub": "repo:thixpin/redemption-app:ref:refs/heads/main"
         }
       }
     }
@@ -90,7 +90,15 @@ aws iam put-role-policy \
   --policy-document file://github-actions-policy.json
 ```
 
-## 5. Connect kubectl and sanity-check the cluster
+## Add the repo secret** in the app repo:
+
+```
+Settings → Secrets and variables → Actions → New secret
+Name:  AWS_CI_ROLE_ARN
+Value: arn:aws:iam::${AWS_ACCOUNT_ID}:role/${CLUSTER_NAME}-github-ci
+```
+
+##  Connect kubectl and sanity-check the cluster
 
 ```bash
 $(terraform output -raw configure_kubectl)
@@ -98,3 +106,16 @@ kubectl get nodes
 kubectl get pods -A    
 
 kubectl apply -f k8s/karpenter/
+
+
+kubectl create namespace argocd
+kubectl create namespace redemption
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl apply -f argocd/project.yaml
+kubectl apply -f argocd/application-app-dev.yaml
+kubectl apply -f argocd/application-karpenter.yaml
+kubectl apply -f argocd/application-observability.yaml
+kubectl -n argocd get applications
+keubectl -n redemption get pods
+
+```

@@ -1,0 +1,30 @@
+# Karpenter NodePool + EC2NodeClass (cluster-scoped) managed via GitOps.
+# The Karpenter controller itself is installed by Terraform (karpenter.tf); this
+# App manages only its scaling configuration so it can be tuned via PRs.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: redemption-karpenter
+  namespace: argocd
+  finalizers:
+    - argocd.argoproj.io/resources-finalizer
+spec:
+  project: redemption
+  source:
+    repoURL: https://github.com/thixpin/redemption-infra.git
+    targetRevision: main
+    path: k8s/karpenter
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: karpenter
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 10

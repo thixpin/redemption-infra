@@ -6,14 +6,14 @@ spec:
   amiFamily: AL2023
   amiSelectorTerms:
     - alias: al2023@latest
-  role: "redemption-prod-karpenter-node"   # created by the Karpenter TF module
-  # Discover subnets/SGs by the tag Terraform applies (karpenter.sh/discovery).
+  role: "redemption-dev-karpenter-node"   # created by the Karpenter TF module (matches local.name)
+  # Discover subnets/SGs by the tag Terraform applies (karpenter.sh/discovery = local.name).
   subnetSelectorTerms:
     - tags:
-        karpenter.sh/discovery: redemption-prod
+        karpenter.sh/discovery: redemption-dev
   securityGroupSelectorTerms:
     - tags:
-        karpenter.sh/discovery: redemption-prod
+        karpenter.sh/discovery: redemption-dev
   metadataOptions:
     httpTokens: required          # enforce IMDSv2
   blockDeviceMappings:

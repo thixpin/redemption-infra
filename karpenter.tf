@@ -7,6 +7,11 @@ module "karpenter" {
 
   cluster_name = module.eks.cluster_name
 
+  # Pin a deterministic node role name so k8s/karpenter/ec2nodeclass.yaml can
+  # reference it directly (module default adds a random suffix).
+  node_iam_role_use_name_prefix = false
+  node_iam_role_name            = "${local.name}-karpenter-node"
+
   enable_irsa            = true
   irsa_oidc_provider_arn = module.eks.oidc_provider_arn
   node_iam_role_additional_policies = {

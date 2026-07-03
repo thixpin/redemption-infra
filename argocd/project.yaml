@@ -1,0 +1,30 @@
+# Argo CD project scoping what the Redemption apps may deploy and where.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: redemption
+  namespace: argocd
+spec:
+  description: The Redemption microservice platform
+  sourceRepos:
+    # GitOps manifests (k8s/, argocd/) live in the infra repo.
+    - https://github.com/thixpin/redemption-infra.git
+    - https://github.com/thixpin/redemption-app.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: redemption
+    - server: https://kubernetes.default.svc
+      namespace: karpenter
+    - server: https://kubernetes.default.svc
+      namespace: monitoring
+
+  clusterResourceWhitelist:
+    - group: karpenter.sh
+      kind: NodePool
+    - group: karpenter.k8s.aws
+      kind: EC2NodeClass
+    - group: ""
+      kind: Namespace
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"

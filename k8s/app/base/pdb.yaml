@@ -1,0 +1,12 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: redemption-api
+  namespace: redemption
+spec:
+  # maxUnavailable (not minAvailable) so it works at any replica count: with the
+  # dev overlay's 2 replicas, minAvailable:2 would block all node drains/consolidation.
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: redemption-api

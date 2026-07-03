@@ -1,0 +1,41 @@
+# GitOps for the DEV environment — syncs the dev overlay
+# (redemption-dev.thixpin.me, 2 replicas, image tag :dev).
+# In a real multi-cluster setup, destination.server points at the dev cluster.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: redemption-api-dev
+  namespace: argocd
+  finalizers:
+    - argocd.argoproj.io/resources-finalizer
+spec:
+  project: redemption
+  source:
+    repoURL: https://github.com/thixpin/redemption-infra.git
+    targetRevision: main
+    path: k8s/app/overlays/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: redemption
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=false
+      - ApplyOutOfSyncOnly=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 10
+  # The HPA owns replica count at runtime; don't let selfHeal fight it.
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      name: redemption-api
+      namespace: redemption
+      jsonPointers:
+        - /spec/replicas
