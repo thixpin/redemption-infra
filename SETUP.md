@@ -116,6 +116,6 @@ kubectl apply -f argocd/application-app-dev.yaml
 kubectl apply -f argocd/application-karpenter.yaml
 kubectl apply -f argocd/application-observability.yaml
 kubectl -n argocd get applications
-keubectl -n redemption get pods
+kubectl -n redemption get pods
 
 ```

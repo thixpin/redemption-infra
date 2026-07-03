@@ -1,0 +1,148 @@
+# Alerting rules for the redemption-api. Two groups:
+#   redemption-platform  -> uses kube-state-metrics / cAdvisor metrics that
+#                           kube-prometheus-stack already collects. Works today,
+#                           no app instrumentation required.
+#   redemption-app       -> uses application HTTP metrics from /metrics. These
+#                           only fire once the app exposes Prometheus metrics.
+#
+# `release: kube-prometheus-stack` label is required for Prometheus to load this.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: redemption-api
+  namespace: monitoring
+  labels:
+    app: redemption-api
+    release: kube-prometheus-stack
+spec:
+  groups:
+    # -----------------------------------------------------------------------
+    - name: redemption-platform
+      rules:
+        - alert: RedemptionApiDeploymentMissing
+          expr: absent(kube_deployment_spec_replicas{namespace="redemption", deployment="redemption-api"})
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "redemption-api Deployment is not present"
+            description: "No kube_deployment metrics for redemption-api in the redemption namespace for 10m — the Deployment may be deleted or Argo failed to sync."
+
+        - alert: RedemptionApiNoAvailableReplicas
+          expr: kube_deployment_status_replicas_available{namespace="redemption", deployment="redemption-api"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "redemption-api has zero available replicas"
+            description: "redemption-api has had no Ready replicas for 2m — the API is down."
+
+        - alert: RedemptionApiDegraded
+          expr: |
+            kube_deployment_status_replicas_available{namespace="redemption", deployment="redemption-api"}
+              < kube_deployment_spec_replicas{namespace="redemption", deployment="redemption-api"}
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "redemption-api running below desired replicas"
+            description: "Available replicas have been below desired for 15m (pending scheduling, crashes, or slow rollout)."
+
+        - alert: RedemptionApiCrashLooping
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="redemption", container="redemption-api"}[15m]) > 3
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "redemption-api pod is crash-looping"
+            description: "Pod {{ $labels.pod }} restarted more than 3 times in 15m."
+
+        - alert: RedemptionApiOOMKilled
+          expr: |
+            max by (pod) (kube_pod_container_status_last_terminated_reason{namespace="redemption", container="redemption-api", reason="OOMKilled"}) == 1
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "redemption-api pod was OOMKilled"
+            description: "Pod {{ $labels.pod }} was killed for exceeding its memory limit — consider raising the memory limit."
+
+        - alert: RedemptionApiHighMemory
+          expr: |
+            max by (pod) (
+              container_memory_working_set_bytes{namespace="redemption", container="redemption-api"}
+              /
+              kube_pod_container_resource_limits{namespace="redemption", container="redemption-api", resource="memory"}
+            ) > 0.9
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "redemption-api memory near limit"
+            description: "Pod {{ $labels.pod }} has used >90% of its memory limit for 10m — OOMKill risk."
+
+        - alert: RedemptionApiHighCPU
+          expr: |
+            max by (pod) (
+              rate(container_cpu_usage_seconds_total{namespace="redemption", container="redemption-api"}[5m])
+              /
+              kube_pod_container_resource_limits{namespace="redemption", container="redemption-api", resource="cpu"}
+            ) > 0.9
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "redemption-api CPU near limit"
+            description: "Pod {{ $labels.pod }} has been throttling (>90% of CPU limit) for 10m."
+
+        - alert: RedemptionApiHpaMaxedOut
+          expr: |
+            kube_horizontalpodautoscaler_status_current_replicas{namespace="redemption", horizontalpodautoscaler="redemption-api"}
+              >= kube_horizontalpodautoscaler_spec_max_replicas{namespace="redemption", horizontalpodautoscaler="redemption-api"}
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "redemption-api HPA is at max replicas"
+            description: "The HPA has been pinned at maxReplicas for 15m — sustained load may exceed capacity; consider raising maxReplicas."
+
+        - alert: RedemptionApiPodsPending
+          expr: |
+            sum(kube_pod_status_phase{namespace="redemption", phase="Pending"}) > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "redemption pods stuck Pending"
+            description: "One or more redemption pods have been Pending for 10m — likely no schedulable capacity (check Karpenter provisioning)."
+
+    # -----------------------------------------------------------------------
+    # Requires the app to expose /metrics (histogram http_request_duration_seconds
+    # with a status_code label). Inert until then — see servicemonitor.yaml.
+    - name: redemption-app
+      rules:
+        - alert: RedemptionApiHighErrorRate
+          expr: |
+            sum(rate(http_request_duration_seconds_count{namespace="redemption", status_code=~"5.."}[5m]))
+            /
+            sum(rate(http_request_duration_seconds_count{namespace="redemption"}[5m]))
+            > 0.05
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "redemption-api 5xx error rate > 5%"
+            description: "More than 5% of requests have returned 5xx over the last 5m."
+
+        - alert: RedemptionApiHighLatencyP99
+          expr: |
+            histogram_quantile(0.99,
+              sum by (le) (rate(http_request_duration_seconds_bucket{namespace="redemption"}[5m]))
+            ) > 0.5
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "redemption-api p99 latency > 500ms"
+            description: "p99 request latency has exceeded 500ms for 10m."

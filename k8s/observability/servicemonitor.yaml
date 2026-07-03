@@ -1,0 +1,36 @@
+# Tells this cluster's Prometheus (kube-prometheus-stack) to scrape the
+# redemption-api pods. The Service lives in the `redemption` namespace, so we
+# select it cross-namespace from here (`monitoring`).
+#
+# PREREQUISITE: the app must expose Prometheus metrics at :3000/metrics.
+# The current app does not yet — until it does, this target shows as "down".
+# (Ask to add a /metrics endpoint with prom-client to activate it.)
+#
+# The `release: kube-prometheus-stack` label is REQUIRED: the stack's Prometheus
+# only selects ServiceMonitors/Rules carrying its release label. If your Helm
+# release name differs, change this label to match.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: redemption-api
+  namespace: monitoring
+  labels:
+    app: redemption-api
+    release: kube-prometheus-stack
+spec:
+  namespaceSelector:
+    matchNames:
+      - redemption
+  selector:
+    matchLabels:
+      app: redemption-api
+  endpoints:
+    - port: http          # Service port name (80 -> targetPort http/3000)
+      path: /metrics
+      interval: 15s
+      scheme: http
+      # Drop the noisy per-instance labels we don't need for aggregation.
+      relabelings:
+        - action: replace
+          sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node

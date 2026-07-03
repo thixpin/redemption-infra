@@ -1,0 +1,54 @@
+# Routes redemption alerts to Slack (all) and PagerDuty (critical only).
+#
+# PREREQUISITES:
+#   1. A secret named `alertmanager-notifications` in the `monitoring` namespace
+#      with keys `slack-webhook-url` and `pagerduty-routing-key`. Terraform
+#      creates it from terraform.tfvars (see observability.tf) — set
+#      slack_webhook_url / pagerduty_routing_key there before this syncs, or
+#      Alertmanager will skip this config (soft fail, no crash).
+#   2. kube-prometheus-stack must be deployed with
+#      alertmanager.alertmanagerSpec.alertmanagerConfigMatcherStrategy.type=None
+#      (set in addons.tf) — otherwise the operator scopes this config to alerts
+#      whose namespace == monitoring and our redemption alerts won't route.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: redemption
+  namespace: monitoring
+  labels:
+    app: redemption-api
+    release: kube-prometheus-stack
+spec:
+  route:
+    receiver: slack-default
+    groupBy: ["alertname", "namespace"]
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 4h
+    routes:
+      # Page for critical alerts (in addition to Slack via continue).
+      - receiver: pagerduty-critical
+        matchers:
+          - name: severity
+            value: critical
+        continue: true
+  receivers:
+    - name: slack-default
+      slackConfigs:
+        - apiURL:
+            name: alertmanager-notifications
+            key: slack-webhook-url
+          channel: "#redemption-alerts"
+          sendResolved: true
+          title: '[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}'
+          text: >-
+            {{ range .Alerts }}*{{ .Annotations.summary }}*
+            {{ .Annotations.description }}
+            {{ end }}
+    - name: pagerduty-critical
+      pagerdutyConfigs:
+        - routingKey:
+            name: alertmanager-notifications
+            key: pagerduty-routing-key
+          sendResolved: true
+          description: '{{ .CommonLabels.alertname }} — {{ .CommonAnnotations.summary }}'

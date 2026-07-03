@@ -28,7 +28,9 @@ module "eks" {
     kube-proxy             = { most_recent = true }
     vpc-cni                = { most_recent = true }
     eks-pod-identity-agent = { most_recent = true }
-    # aws-ebs-csi-driver     = { most_recent = true } # nothing here uses PersistentVolumes
+    # aws-ebs-csi-driver is installed standalone in storage.tf (with its own IRSA
+    # role) so the monitoring stack's PVCs can be provisioned without a cycle
+    # between the addon role and this module's OIDC provider.
   }
 
   # A small, always-on managed node group hosts cluster-critical add-ons

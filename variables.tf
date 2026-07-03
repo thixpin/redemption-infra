@@ -69,3 +69,17 @@ variable "cluster_admin_role_arns" {
   type        = list(string)
   default     = []
 }
+
+variable "slack_webhook_url" {
+  description = "Slack incoming webhook URL for Alertmanager notifications (leave empty to skip)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "pagerduty_routing_key" {
+  description = "PagerDuty Events v2 routing key for critical Alertmanager alerts (leave empty to skip)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}

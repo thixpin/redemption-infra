@@ -12,6 +12,9 @@ module "eks_blueprints_addons" {
   cluster_version   = module.eks.cluster_version
   oidc_provider_arn = module.eks.oidc_provider_arn
 
+  # kube-prometheus-stack PVCs need the gp3 class (and thus the EBS CSI driver).
+  depends_on = [kubernetes_storage_class_v1.gp3]
+
   enable_aws_load_balancer_controller = true
   enable_metrics_server               = true
   enable_external_secrets             = true
@@ -23,6 +26,47 @@ module "eks_blueprints_addons" {
       repository       = "https://prometheus-community.github.io/helm-charts"
       namespace        = "monitoring"
       create_namespace = true
+      values = [yamlencode({
+        prometheus = {
+          prometheusSpec = {
+            retention = "15d"
+            storageSpec = {
+              volumeClaimTemplate = {
+                spec = {
+                  storageClassName = "gp3"
+                  accessModes      = ["ReadWriteOnce"]
+                  resources        = { requests = { storage = "20Gi" } }
+                }
+              }
+            }
+          }
+        }
+        alertmanager = {
+          alertmanagerSpec = {
+            # Default (OnNamespace) would only match alerts whose namespace ==
+            # monitoring; our redemption alerts live in the redemption namespace,
+            # so route by matchers only. See k8s/observability/alertmanagerconfig.yaml.
+            alertmanagerConfigMatcherStrategy = { type = "None" }
+            storage = {
+              volumeClaimTemplate = {
+                spec = {
+                  storageClassName = "gp3"
+                  accessModes      = ["ReadWriteOnce"]
+                  resources        = { requests = { storage = "5Gi" } }
+                }
+              }
+            }
+          }
+        }
+        grafana = {
+          persistence = {
+            enabled          = true
+            storageClassName = "gp3"
+            accessModes      = ["ReadWriteOnce"]
+            size             = "5Gi"
+          }
+        }
+      })]
     }
   }
 
