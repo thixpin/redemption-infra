@@ -113,6 +113,7 @@ module "aurora" {
 
   backup_retention_period = 14
   deletion_protection     = true
+  final_snapshot_identifier= "${local.name}-final-snapshot"
   skip_final_snapshot     = false
 
   performance_insights_enabled    = true

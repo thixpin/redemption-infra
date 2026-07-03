@@ -23,5 +23,71 @@ aws dynamodb create-table \
 terraform init  -backend-config=backend.hcl
 terraform validate
 terraform plan 
-
+terraform apply 
 ```
+
+# Configure GitHub Actions OIDC provider in AWS IAM
+
+```bash 
+aws iam create-open-id-connect-provider \
+  --url https://token.actions.githubusercontent.com \
+  --client-id-list sts.amazonaws.com \
+  --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1 
+
+# Create a trust policy document for the GitHub Actions OIDC provider
+cat <<EOT > github-actions-trust-policy.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {   
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "arn:aws:iam::${AWS_ACCOUNT_ID}:oidc-provider/token.actions.githubusercontent.com"
+      },
+      "Action": "sts:AssumeRoleWithWebIdentity",
+      "Condition": {
+        "StringEquals": {
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
+          "token.actions.githubusercontent.com:sub": "repo:thixpin/redemption-app:ref:refs/heads/develop"
+        }
+      }
+    }
+  ]
+}
+EOT
+
+# Create AIM Role to allow GitHub Actions to assume the role and deploy to AWS
+aws iam create-role \
+  --role-name ${PROJECT}-${ENVIRONMENT}-github-actions \
+  --assume-role-policy-document file://github-actions-trust-policy.json
+
+# Create a policy for the role to allow it to deploy resources
+cat <<EOT > github-actions-policy.json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetAuthorizationToken",
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:BatchGetImage",
+        "ecr:PutImage",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+EOT
+
+aws iam put-role-policy \
+  --role-name ${PROJECT}-${ENVIRONMENT}-github-actions \
+  --policy-name ${PROJECT}-${ENVIRONMENT}-github-actions-policy \
+  --policy-document file://github-actions-policy.json
+```
+
+
