@@ -5,6 +5,7 @@ resources:
   - namespace.yaml
   - serviceaccount.yaml
   - externalsecret.yaml
+  - migrate-job.yaml
   - deployment.yaml
   - service.yaml
   - ingress.yaml

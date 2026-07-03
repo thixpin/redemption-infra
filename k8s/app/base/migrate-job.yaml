@@ -1,0 +1,51 @@
+# Schema migration as an Argo CD PreSync hook
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: redemption-api-migrate
+  namespace: redemption
+  labels:
+    app: redemption-api
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    # Delete the previous hook Job before creating the new one (Jobs are immutable).
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 300
+  template:
+    metadata:
+      labels:
+        app: redemption-api      # inherits the NetworkPolicy egress (DNS + 5432)
+    spec:
+      serviceAccountName: redemption-api
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: migrate
+          image: 801100257021.dkr.ecr.ap-southeast-1.amazonaws.com/redemption/redemption-api:bootstrap
+          command: ["node", "src/migrate.js"]
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: redemption-db
+                  key: DATABASE_URL
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "250m"
+              memory: "128Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
