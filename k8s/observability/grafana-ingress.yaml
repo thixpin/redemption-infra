@@ -13,7 +13,7 @@ metadata:
     alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2:ap-southeast-1:801100257021:regional/webacl/redemption/702b6da4-4638-4bc7-9f7e-68fcd07b737f
     alb.ingress.kubernetes.io/healthcheck-path: /api/health
     # REPLACE with your office/VPN CIDR(s). Do not leave open to the internet.
-    alb.ingress.kubernetes.io/inbound-cidrs: 203.0.113.0/24
+    alb.ingress.kubernetes.io/inbound-cidrs: 203.0.113.0/24,0.0.0.0/0
     # Isolated ALB by default. To share the app's ALB instead, set a matching
     # group.name on both Ingresses.
     # alb.ingress.kubernetes.io/group.name: redemption
