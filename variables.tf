@@ -70,6 +70,12 @@ variable "cluster_admin_role_arns" {
   default     = []
 }
 
+variable "cluster_endpoint_public_access_cidrs" {
+  description = "CIDRs allowed to reach the EKS public API endpoint. Restrict to admin/office/VPN ranges in prod (private access stays on for in-cluster/VPC clients)."
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
 variable "slack_webhook_url" {
   description = "Slack incoming webhook URL for Alertmanager notifications (leave empty to skip)"
   type        = string

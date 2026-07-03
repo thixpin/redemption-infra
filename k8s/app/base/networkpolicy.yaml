@@ -20,11 +20,13 @@ spec:
       app: redemption-api
   policyTypes: [Ingress, Egress]
   ingress:
-    # Allow the ALB (via the load balancer controller) to reach the app port.
+    # The ALB uses target-type: ip, so it connects from its ENIs in the VPC
+    # (public subnets) — not from a pod. Allow the VPC CIDR on the app port so
+    # ALB health checks and traffic reach the pods. Narrow to the public-subnet
+    # CIDRs if you want it tighter. Must match var.vpc_cidr.
     - from:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
+        - ipBlock:
+            cidr: 10.0.0.0/16
       ports:
         - protocol: TCP
           port: 3000
@@ -45,10 +47,12 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
-    # PostgreSQL to the RDS Proxy (outside the cluster CIDR).
+    # PostgreSQL to the RDS Proxy (in the VPC's isolated DB subnets). Scoped to
+    # the VPC CIDR so pods can't reach arbitrary external databases. Must match
+    # var.vpc_cidr.
     - to:
         - ipBlock:
-            cidr: 0.0.0.0/0
+            cidr: 10.0.0.0/16
       ports:
         - protocol: TCP
           port: 5432

@@ -7,8 +7,9 @@ module "eks" {
   cluster_name    = local.name
   cluster_version = var.cluster_version
 
-  cluster_endpoint_public_access  = true
-  cluster_endpoint_private_access = true
+  cluster_endpoint_public_access       = true
+  cluster_endpoint_private_access      = true
+  cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
 
   # Secrets envelope-encrypted at rest with a dedicated KMS key.
   create_kms_key            = true
@@ -24,9 +25,16 @@ module "eks" {
   cluster_enabled_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
 
   cluster_addons = {
-    coredns                = { most_recent = true }
-    kube-proxy             = { most_recent = true }
-    vpc-cni                = { most_recent = true }
+    coredns    = { most_recent = true }
+    kube-proxy = { most_recent = true }
+    vpc-cni = {
+      most_recent = true
+      # Enforce Kubernetes NetworkPolicy (default-deny + explicit allows) at the
+      # pod-network layer. Without this the NetworkPolicy objects are no-ops.
+      configuration_values = jsonencode({
+        enableNetworkPolicy = "true"
+      })
+    }
     eks-pod-identity-agent = { most_recent = true }
     # aws-ebs-csi-driver is installed standalone in storage.tf (with its own IRSA
     # role) so the monitoring stack's PVCs can be provisioned without a cycle
