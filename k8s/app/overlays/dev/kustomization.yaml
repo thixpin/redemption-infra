@@ -12,4 +12,4 @@ patches:
 # value below is a placeholder until the first CI build lands a real SHA.
 images:
   - name: 801100257021.dkr.ecr.ap-southeast-1.amazonaws.com/redemption/redemption-api
-    newTag: bfe9c399feb9
+    newTag: b545826ac67b
