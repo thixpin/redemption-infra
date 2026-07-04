@@ -167,6 +167,10 @@ kubectl apply -f argocd/application-observability.yaml
 # Argo CD UI ingress (joins the shared "redemption-admin" ALB with Grafana)
 kubectl apply -f argocd/ingress.yaml
 
+# HPA health-check override (stops Healthy<->Degraded flapping on rollouts)
+kubectl apply -f argocd/argocd-cm-health.yaml
+kubectl -n argocd rollout restart statefulset/argocd-application-controller
+
 kubectl -n argocd get applications
 ```
 

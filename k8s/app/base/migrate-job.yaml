@@ -16,7 +16,7 @@ spec:
   template:
     metadata:
       labels:
-        app: redemption-api      # inherits the NetworkPolicy egress (DNS + 5432)
+        app: redemption-api-migrate
     spec:
       serviceAccountName: redemption-api
       restartPolicy: Never

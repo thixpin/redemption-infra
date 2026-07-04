@@ -1,0 +1,35 @@
+# Custom Argo CD health check for HPAs.
+#
+# The built-in check marks an HPA Degraded on ANY metric-fetch hiccup — which
+# happens transiently right after every rollout (metrics-server has no CPU
+# samples for brand-new pods yet, and the custom RPS metric is briefly empty),
+# flapping the whole app Healthy<->Degraded. This override only degrades when
+# the HPA is genuinely unable to scale (AbleToScale=False).
+#
+# kubectl apply merges this data key into the existing argocd-cm from the stock
+# install.yaml (it doesn't clobber other keys). Apply, then restart the
+# application controller to pick it up:
+#   kubectl apply -f argocd/argocd-cm-health.yaml
+#   kubectl -n argocd rollout restart statefulset/argocd-application-controller
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-cm
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: argocd-cm
+    app.kubernetes.io/part-of: argocd
+data:
+  resource.customizations.health.autoscaling_HorizontalPodAutoscaler: |
+    hs = {}
+    hs.status = "Healthy"
+    hs.message = ""
+    if obj.status ~= nil and obj.status.conditions ~= nil then
+      for _, c in ipairs(obj.status.conditions) do
+        if c.type == "AbleToScale" and c.status == "False" then
+          hs.status = "Degraded"
+          hs.message = c.message
+        end
+      end
+    end
+    return hs
