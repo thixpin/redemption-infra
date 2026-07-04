@@ -13,9 +13,7 @@ metadata:
     alb.ingress.kubernetes.io/ssl-redirect: "443"
     # Wildcard *.thixpin.me — must match the Grafana ingress (shared listener).
     alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-southeast-1:801100257021:certificate/e1b6f044-bac8-435b-8826-d9ab3304ad38
-    alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2:ap-southeast-1:801100257021:regional/webacl/redemption/702b6da4-4638-4bc7-9f7e-68fcd07b737f
-    # Must be identical to the Grafana ingress (ALB security group is shared).
-    alb.ingress.kubernetes.io/inbound-cidrs: 34.180.37.226/32
+    alb.ingress.kubernetes.io/inbound-cidrs: 34.180.37.226/32,34.21.158.178/32
     # argocd-server serves TLS itself; ALB -> pod over HTTPS.
     alb.ingress.kubernetes.io/backend-protocol: HTTPS
     alb.ingress.kubernetes.io/healthcheck-protocol: HTTPS

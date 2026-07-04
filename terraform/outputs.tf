@@ -45,3 +45,38 @@ output "app_secrets_irsa_role_arn" {
   description = "Annotate the redemption-secretstore ServiceAccount with this"
   value       = module.app_secrets_irsa.iam_role_arn
 }
+
+# ALB hostnames — the app ALB is public, the shared admin ALB hosts Grafana + Argo CD.
+data "aws_lbs" "app" {
+  tags = {
+    "elbv2.k8s.aws/cluster" = module.eks.cluster_name
+    "ingress.k8s.aws/stack" = "redemption/redemption-api"
+  }
+}
+
+data "aws_lb" "app" {
+  for_each = data.aws_lbs.app.arns
+  arn      = each.value
+}
+
+data "aws_lbs" "admin" {
+  tags = {
+    "elbv2.k8s.aws/cluster" = module.eks.cluster_name
+    "ingress.k8s.aws/stack" = "redemption-admin" # shared Grafana + Argo CD IngressGroup
+  }
+}
+
+data "aws_lb" "admin" {
+  for_each = data.aws_lbs.admin.arns
+  arn      = each.value
+}
+
+output "app_alb_hostname" {
+  description = "Public app ALB — CNAME redemption-dev here"
+  value       = try(one([for lb in data.aws_lb.app : lb.dns_name]), "(not provisioned yet — sync the app Ingress first)")
+}
+
+output "admin_alb_hostname" {
+  description = "Shared admin ALB (Grafana + Argo CD) — CNAME redemption-grafana-dev AND redemption-argocd-dev here"
+  value       = try(one([for lb in data.aws_lb.admin : lb.dns_name]), "(not provisioned yet — apply the Grafana/Argo CD Ingresses first)")
+}

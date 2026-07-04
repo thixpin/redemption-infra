@@ -194,9 +194,12 @@ kubectl -n redemption get pods -w
 
 Two ALBs: the **app ALB** (public) and the **shared admin ALB** — Grafana and
 Argo CD join the same `redemption-admin` IngressGroup, so both admin hosts CNAME
-to the **same** ALB hostname. Get the hostnames:
+to the **same** ALB hostname. Get the hostnames (either way):
 
 ```bash
+terraform -chdir=terraform output app_alb_hostname     # app ALB
+terraform -chdir=terraform output admin_alb_hostname   # shared admin ALB
+# or from the cluster:
 kubectl -n redemption get ingress redemption-api \
   -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'   # app ALB
 kubectl -n monitoring get ingress grafana \
