@@ -68,7 +68,7 @@ module "eks_blueprints_addons" {
           # Public URL Grafana serves behind. Needed so login/OAuth redirects use
           # https when the ALB terminates TLS (see k8s/observability/grafana-ingress.yaml).
           env = {
-            GF_SERVER_ROOT_URL = "https://grafana-dev.thixpin.me"
+            GF_SERVER_ROOT_URL = "https://redemption-grafana-dev.thixpin.me"
           }
         }
       })]

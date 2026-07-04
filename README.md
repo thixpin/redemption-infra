@@ -13,7 +13,8 @@ same cluster, pipelines, and guardrails.
 - **Networking:** 3-tier VPC (public / private / isolated-DB) across 3 AZs, NAT, flow logs.
 - **Cluster:** EKS with a small managed node group + **Karpenter** (spot/on-demand, arm64/amd64) for app capacity.
 - **Delivery:** **Argo CD** GitOps; app images are immutable git-SHA tags in **ECR** (scan-on-push); CI bumps the overlay and Argo syncs.
-- **Edge:** ALB (via AWS LB Controller) with **WAF + ACM TLS**.
+- **Edge:** ALBs (via AWS LB Controller) with **WAF + ACM TLS** — one public ALB
+  for the app, one **shared CIDR-gated admin ALB** (IngressGroup) for Grafana + Argo CD.
 - **Data (optional):** Aurora PostgreSQL Serverless v2 + RDS Proxy.
 - **Secrets:** AWS Secrets Manager synced by **External Secrets** (IRSA, least-privilege).
 - **Autoscaling:** HPA on CPU **and** a custom RPS metric (prometheus-adapter) + Karpenter node scaling.
@@ -31,6 +32,7 @@ same cluster, pipelines, and guardrails.
 │   └── terraform.tfvars  #   environment inputs (edit these; gitignored)
 ├── github-actions-*.json # CI OIDC role trust + policy (used by SETUP.md)
 ├── argocd/               # Argo CD AppProject + Applications (point at this repo)
+│   └── ingress.yaml      #   Argo CD UI on the shared admin ALB (applied manually)
 ├── k8s/
 │   ├── app/base/         # app manifests: deployment, svc, ingress, hpa, pdb,
 │   │                     #   networkpolicy, externalsecret, serviceaccount
@@ -55,6 +57,8 @@ needs to: run as a container, listen on a port, and expose a **health** endpoint
    - `deployment.yaml`: image name, `containerPort`, env, resource requests/limits, probe paths.
    - `service.yaml`: port/targetPort.
    - `ingress.yaml`: `host`, ACM `certificate-arn`, WAF ARN, `healthcheck-path`.
+     Public app → own ALB; internal/admin UI → join the shared `redemption-admin`
+     IngressGroup (`alb.ingress.kubernetes.io/group.name`) to reuse that ALB.
    - `hpa.yaml`: min/max replicas and targets.
    - `externalsecret.yaml`: the Secrets Manager key (or delete if the app has no secrets — see below).
    - `networkpolicy.yaml`: keep default-deny; adjust egress to your dependencies.

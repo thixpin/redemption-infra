@@ -164,6 +164,9 @@ kubectl apply -f argocd/application-app-dev.yaml
 kubectl apply -f argocd/application-karpenter.yaml
 kubectl apply -f argocd/application-observability.yaml
 
+# Argo CD UI ingress (joins the shared "redemption-admin" ALB with Grafana)
+kubectl apply -f argocd/ingress.yaml
+
 kubectl -n argocd get applications
 ```
 
@@ -189,36 +192,57 @@ kubectl -n redemption get pods -w
 
 ## 9. DNS (Cloudflare, manual)
 
-Get the ALB hostname and create a **DNS-only (grey-cloud) CNAME**:
+Two ALBs: the **app ALB** (public) and the **shared admin ALB** — Grafana and
+Argo CD join the same `redemption-admin` IngressGroup, so both admin hosts CNAME
+to the **same** ALB hostname. Get the hostnames:
 
 ```bash
 kubectl -n redemption get ingress redemption-api \
-  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'   # app ALB
+kubectl -n monitoring get ingress grafana \
+  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'   # shared admin ALB
 ```
+
+Create **DNS-only (grey-cloud) CNAMEs**:
 
 | Type | Name | Target | Proxy |
 |------|------|--------|-------|
 | CNAME | `redemption-dev` | `<app ALB hostname>` | DNS only |
-| CNAME | `grafana-dev` | `<grafana ALB hostname>` (`kubectl -n monitoring get ingress grafana ...`) | DNS only |
+| CNAME | `redemption-grafana-dev` | `<shared admin ALB hostname>` | DNS only |
+| CNAME | `redemption-argocd-dev` | `<same shared admin ALB hostname>` | DNS only |
 
 DNS-only keeps the ALB (ACM TLS + WAF) as the edge. The wildcard `*.thixpin.me`
-ACM cert covers both hosts.
+ACM cert covers all hosts.
 
 Verify: `curl https://redemption-dev.thixpin.me/health` → `{"status":"ok"}`.
 
-## 10. Observability / Grafana access
+## 10. Admin UIs (Grafana / Argo CD)
 
-Admin tools are safest via port-forward (no public exposure):
+Both are served from the **shared, CIDR-gated admin ALB**:
+`https://redemption-grafana-dev.thixpin.me` and
+`https://redemption-argocd-dev.thixpin.me`. The `inbound-cidrs` annotation
+(identical on both ingresses — it configures the one shared ALB) must include
+your office/VPN CIDR.
+
+Credentials:
 
 ```bash
+# Grafana (user: admin) — change the default password after first login
 kubectl -n monitoring get secret kube-prometheus-stack-grafana \
-  -o jsonpath='{.data.admin-password}' | base64 -d; echo    # user: admin
-kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
+  -o jsonpath='{.data.admin-password}' | base64 -d; echo
+
+# Argo CD (user: admin) — then delete this bootstrap secret
+kubectl -n argocd get secret argocd-initial-admin-secret \
+  -o jsonpath='{.data.password}' | base64 -d; echo
+# CLI through the ALB:  argocd login redemption-argocd-dev.thixpin.me --grpc-web
 ```
 
-The Grafana Ingress (`grafana-dev.thixpin.me`) is gated by
-`alb.ingress.kubernetes.io/inbound-cidrs` — set it to your office/VPN CIDR(s)
-before relying on it, and change the default Grafana admin password.
+Port-forward remains the zero-exposure fallback:
+
+```bash
+kubectl -n monitoring port-forward svc/kube-prometheus-stack-grafana 3000:80
+kubectl -n argocd port-forward svc/argocd-server 8080:443
+```
 
 ## 11. Verify
 
@@ -240,7 +264,11 @@ curl -s https://redemption-dev.thixpin.me/api/codes
 - **Rollback** a bad deploy with `git revert` in this repo; Argo CD re-syncs the
   previous immutable tag.
 - **Lock down** the EKS public endpoint (`cluster_endpoint_public_access_cidrs`)
-  and Grafana `inbound-cidrs` for anything beyond a demo.
+  and the admin ALB `inbound-cidrs` for anything beyond a demo.
+- **Shared admin ALB**: ALB-level annotations (scheme, `inbound-cidrs`, WAF,
+  certs) must stay IDENTICAL on every ingress in the `redemption-admin` group —
+  they configure the single shared ALB. Changing `group.name` replaces the ALB
+  (new hostname → update the CNAMEs).
 
 ## Teardown
 

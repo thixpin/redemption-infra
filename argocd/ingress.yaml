@@ -1,34 +1,35 @@
+# ALB Ingress for the Argo CD UI/API at redemption-argocd-dev.thixpin.me.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: grafana
-  namespace: monitoring
+  name: argocd-server
+  namespace: argocd
   annotations:
-    # Shared admin ALB with the Argo CD ingress (argocd/ingress.yaml)
     alb.ingress.kubernetes.io/group.name: redemption-admin
-    alb.ingress.kubernetes.io/group.order: "10"
+    alb.ingress.kubernetes.io/group.order: "20"
     alb.ingress.kubernetes.io/scheme: internet-facing
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
     alb.ingress.kubernetes.io/ssl-redirect: "443"
-    # Replace with an ACM cert ARN that covers redemption-grafana-dev.thixpin.me.
+    # Wildcard *.thixpin.me — must match the Grafana ingress (shared listener).
     alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-southeast-1:801100257021:certificate/e1b6f044-bac8-435b-8826-d9ab3304ad38
     alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2:ap-southeast-1:801100257021:regional/webacl/redemption/702b6da4-4638-4bc7-9f7e-68fcd07b737f
-    alb.ingress.kubernetes.io/healthcheck-path: /api/health
-    # REPLACE with your office/VPN CIDR(s). Do not leave open to the internet.
+    # Must be identical to the Grafana ingress (ALB security group is shared).
     alb.ingress.kubernetes.io/inbound-cidrs: 34.180.37.226/32
+    # argocd-server serves TLS itself; ALB -> pod over HTTPS.
+    alb.ingress.kubernetes.io/backend-protocol: HTTPS
+    alb.ingress.kubernetes.io/healthcheck-protocol: HTTPS
+    alb.ingress.kubernetes.io/healthcheck-path: /healthz
 spec:
   ingressClassName: alb
   rules:
-    - host: redemption-grafana-dev.thixpin.me
+    - host: redemption-argocd-dev.thixpin.me
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                # Service created by kube-prometheus-stack (verify the name with
-                # `kubectl -n monitoring get svc | grep grafana`).
-                name: kube-prometheus-stack-grafana
+                name: argocd-server
                 port:
-                  number: 80
+                  number: 443
