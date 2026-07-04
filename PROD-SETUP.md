@@ -142,6 +142,20 @@ After that, every subsequent sync is self-sufficient (the Secret persists).
 ```bash
 # in redemption-app, after merging develop -> main:
 git tag v1.0.0 && git push origin main --tags
+
+# --- optional: create the `bootstrap` tag ------------------------------------
+# Only needed if Argo CD synced BEFORE the first release (the overlay's
+# placeholder tag `bootstrap` doesn't exist in ECR -> migrate Job
+# ImagePullBackOff). Point `bootstrap` at the released image. Use imagetools
+# (manifest copy) — a docker pull/tag/push would flatten the multi-arch image
+# to a single arch and crash on the arm64/amd64 node mix.
+aws ecr get-login-password --region $AWS_REGION \
+  | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+
+RELEASED_SHA=$(git rev-parse --short=12 v1.0.0)
+PROD_REPO="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/redemption/redemption-api"
+docker buildx imagetools create -t "${PROD_REPO}:bootstrap" "${PROD_REPO}:${RELEASED_SHA}"
+# ------------------------------------------------------------------------------
 ```
 
 Watch: GitHub Actions `Deploy Prod` → image in prod ECR → commit
@@ -154,6 +168,9 @@ kubectl -n redemption get pods -w
 ## 7. DNS (Cloudflare, DNS-only CNAMEs)
 
 ```bash
+cd terraform
+terraform apply -refresh-only -var-file=envs/prod/terraform.tfvars
+cd ..
 terraform -chdir=terraform output app_alb_hostname     # app ALB
 terraform -chdir=terraform output admin_alb_hostname   # shared admin ALB (Grafana + Argo CD)
 ```
