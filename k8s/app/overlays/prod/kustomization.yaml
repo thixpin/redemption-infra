@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+patches:
+  - path: ingress-patch.yaml
+  - path: deployment-patch.yaml
+  - path: serviceaccount-patch.yaml
+  - path: externalsecret-patch.yaml
+# Image lives in the PROD account's ECR, pushed by deploy-prod.yaml on v*
+# release tags (built from the tagged commit, scanned, multi-arch). The same
+# workflow writes newTag here; Argo CD then rolls out the deployment.
+images:
+  - name: 801100257021.dkr.ecr.ap-southeast-1.amazonaws.com/redemption/redemption-api
+    newName: 770385967466.dkr.ecr.ap-southeast-1.amazonaws.com/redemption/redemption-api
+    newTag: bootstrap

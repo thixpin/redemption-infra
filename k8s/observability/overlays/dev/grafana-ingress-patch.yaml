@@ -1,21 +1,22 @@
+# Prod Grafana on the prod account's shared admin ALB. Fill the placeholders
+# with PROD-account resources (ACM cert covering the host, office/VPN CIDRs).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: redemption-api
-  namespace: redemption
+  name: grafana
+  namespace: monitoring
   annotations:
-    # Dev-account ACM cert (*.thixpin.me) + WAF web ACL.
     alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-southeast-1:801100257021:certificate/e1b6f044-bac8-435b-8826-d9ab3304ad38
-    alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2:ap-southeast-1:801100257021:regional/webacl/redemption/702b6da4-4638-4bc7-9f7e-68fcd07b737f
+    alb.ingress.kubernetes.io/inbound-cidrs: 34.180.37.226/32,34.21.158.178/32
 spec:
   rules:
-    - host: redemption-dev.thixpin.me
+    - host: redemption-grafana-dev.thixpin.me
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: redemption-api
+                name: kube-prometheus-stack-grafana
                 port:
                   number: 80

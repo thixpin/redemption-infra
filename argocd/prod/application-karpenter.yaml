@@ -1,0 +1,28 @@
+# PROD Karpenter scaling config — applied on the PROD cluster's Argo CD.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: redemption-karpenter
+  namespace: argocd
+  finalizers:
+    - argocd.argoproj.io/resources-finalizer
+spec:
+  project: redemption
+  source:
+    repoURL: https://github.com/thixpin/redemption-infra.git
+    targetRevision: main
+    path: k8s/karpenter/overlays/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: karpenter
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 10

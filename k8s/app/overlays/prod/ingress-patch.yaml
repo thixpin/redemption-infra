@@ -1,0 +1,22 @@
+# Prod public endpoint. Fill placeholders with PROD-account resources
+# (ACM cert covering the host, prod WAF web ACL).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: redemption-api
+  namespace: redemption
+  annotations:
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-southeast-1:770385967466:certificate/2d098864-53c0-4736-a347-a1329eb5bcb9
+    alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2:ap-southeast-1:770385967466:regional/webacl/redemptions-acl/9e55e64d-899e-4f5c-978b-9b945ce007f5
+spec:
+  rules:
+    - host: redemption-api.thixpin.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: redemption-api
+                port:
+                  number: 80

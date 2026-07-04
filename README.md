@@ -5,7 +5,8 @@ Terraform + Kustomize + Argo CD. It was created for the Redemption service, but
 it's structured so you can **drop in another (often simpler) app** and reuse the
 same cluster, pipelines, and guardrails.
 
-- **Full setup:** [`SETUP.md`](./SETUP.md) — one-time bootstrap runbook.
+- **Full setup:** [`SETUP.md`](./SETUP.md) — one-time bootstrap runbook (dev).
+- **Prod setup:** [`PROD-SETUP.md`](./PROD-SETUP.md) — separate-account prod bootstrap.
 - **Design rationale:** [`docs/DESIGN.md`](./docs/DESIGN.md) + [`docs/architecture.drawio`](./docs/architecture.drawio).
 
 ## What you get
@@ -25,22 +26,29 @@ same cluster, pipelines, and guardrails.
 
 ```
 .
-├── terraform/            # All Terraform (run `terraform` from here):
-│   ├── *.tf              #   vpc, eks, karpenter, addons, rds, ecr, storage,
-│   │                     #   observability, variables, outputs
-│   ├── backend.hcl       #   S3/DynamoDB remote-state config
-│   └── terraform.tfvars  #   environment inputs (edit these; gitignored)
-├── github-actions-*.json # CI OIDC role trust + policy (used by SETUP.md)
-├── argocd/               # Argo CD AppProject + Applications (point at this repo)
-│   └── ingress.yaml      #   Argo CD UI on the shared admin ALB (applied manually)
+├── terraform/                # One root module for every environment
+│   ├── *.tf                  #   vpc, eks, karpenter, addons, rds, ecr, storage,
+│   │                         #   observability, variables, outputs
+│   └── envs/{dev,prod}/      #   per-env backend.hcl + terraform.tfvars
+├── github-actions-*.json     # CI OIDC role trust + policy (used by SETUP.md)
+├── argocd/
+│   ├── project.yaml          # shared AppProject
+│   ├── argocd-cm-health.yaml # HPA health-check override (per cluster)
+│   ├── dev/                  # DEV cluster's Applications + Argo CD UI ingress
+│   └── prod/                 # PROD cluster's Applications + UI ingress
 ├── k8s/
-│   ├── app/base/         # app manifests: deployment, svc, ingress, hpa, pdb,
-│   │                     #   networkpolicy, externalsecret, serviceaccount
-│   ├── app/overlays/dev/ # per-env patches + image tag (CI-managed)
-│   ├── karpenter/        # NodePool + EC2NodeClass
-│   └── observability/    # ServiceMonitor, PrometheusRule, AlertmanagerConfig, Grafana ingress
-└── docs/                 # design doc + architecture diagram
+│   ├── app/base/             # env-agnostic app manifests (deployment, svc,
+│   │                         #   ingress, hpa, pdb, netpol, externalsecret, sa, migrate job)
+│   ├── app/overlays/{dev,prod}/        # host/cert/WAF/IRSA/secret-key/image per env
+│   ├── karpenter/base + overlays/      # NodePool + EC2NodeClass (role/tags per env)
+│   └── observability/base + overlays/  # monitors, rules, alerting, Grafana ingress
+└── docs/                     # design doc + architecture diagram
 ```
+
+Environments: **dev** deploys continuously from the app repo's `develop` branch
+(`deploy-dev.yaml`); **prod** (separate AWS account) deploys on release tags
+(`v*` on `main`, `deploy-prod.yaml`) — the tagged commit is built, scanned, and
+pushed to the prod account's own ECR. See [`PROD-SETUP.md`](./PROD-SETUP.md) for the prod bootstrap.
 
 ## Deploy a new app on this platform
 
@@ -56,17 +64,18 @@ needs to: run as a container, listen on a port, and expose a **health** endpoint
 3. **Base manifests** (`k8s/app/base/`) — set:
    - `deployment.yaml`: image name, `containerPort`, env, resource requests/limits, probe paths.
    - `service.yaml`: port/targetPort.
-   - `ingress.yaml`: `host`, ACM `certificate-arn`, WAF ARN, `healthcheck-path`.
+   - `ingress.yaml`: `healthcheck-path` in base; `host`, ACM `certificate-arn`
+     and WAF ARN live in the overlay patches (account/env-specific).
      Public app → own ALB; internal/admin UI → join the shared `redemption-admin`
      IngressGroup (`alb.ingress.kubernetes.io/group.name`) to reuse that ALB.
    - `hpa.yaml`: min/max replicas and targets.
    - `externalsecret.yaml`: the Secrets Manager key (or delete if the app has no secrets — see below).
    - `networkpolicy.yaml`: keep default-deny; adjust egress to your dependencies.
 4. **Overlay** (`k8s/app/overlays/<env>/`) — per-env host, replicas, image tag.
-5. **Argo CD Application** — copy `argocd/application-app-dev.yaml`, set `repoURL`
-   (this repo), `path` (your overlay), and `destination.namespace`; add the repo
-   to `argocd/project.yaml` `sourceRepos` if new.
-6. **DNS** — CNAME the host to the app's ALB (DNS-only). See `SETUP.md §8`.
+5. **Argo CD Application** — copy `argocd/dev/application-app-dev.yaml`, set
+   `repoURL` (this repo), `path` (your overlay), and `destination.namespace`;
+   add the repo to `argocd/project.yaml` `sourceRepos` if new.
+6. **DNS** — CNAME the host to the app's ALB (DNS-only). See `SETUP.md §9`.
 
 ## Configuration reference (Terraform)
 
@@ -78,6 +87,8 @@ needs to: run as a container, listen on a port, and expose a **health** endpoint
 | `cluster_admin_role_arns` | IAM roles granted cluster-admin (EKS access entries) |
 | `cluster_endpoint_public_access_cidrs` | Lock the API endpoint to admin CIDRs |
 | `aurora_*`, `db_*` | Database engine/capacity/name (ignore if no DB) |
+| `grafana_hostname` | Public Grafana URL (sets `GF_SERVER_ROOT_URL`) |
+| `ecr_replication_*` | Optional cross-account image replication (alternative to CI pushing to prod ECR) |
 | `slack_webhook_url`, `pagerduty_routing_key` | Alertmanager routing |
 
 > If you change `vpc_cidr`, also update the hardcoded CIDR in
@@ -88,9 +99,10 @@ needs to: run as a container, listen on a port, and expose a **health** endpoint
 If the new app has **no database**, remove the data tier to cut cost/complexity:
 
 - Delete `terraform/rds.tf` (Aurora + RDS Proxy) and the DB outputs in `terraform/outputs.tf`.
-- Delete `k8s/app/base/externalsecret.yaml` and drop it from `kustomization.yaml`;
-  remove the `DATABASE_URL` env and the external-secrets IRSA in `terraform/addons.tf` if unused.
-- Remove the `5432` egress rule from `networkpolicy.yaml`.
+- Delete `k8s/app/base/externalsecret.yaml` **and** `migrate-job.yaml` (no DB =
+  no migrations) and drop both from `kustomization.yaml`; remove the
+  `DATABASE_URL` env and the external-secrets IRSA in `terraform/addons.tf` if unused.
+- Remove the `5432` egress rules (app + migrate policies) from `networkpolicy.yaml`.
 - Optionally drop the database subnet tier in `terraform/main.tf`/`terraform/vpc.tf`.
 
 Everything else (EKS, Karpenter, ALB, GitOps, observability, autoscaling) applies

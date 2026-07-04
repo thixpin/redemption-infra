@@ -1,10 +1,8 @@
-# Karpenter NodePool + EC2NodeClass (cluster-scoped) managed via GitOps.
-# The Karpenter controller itself is installed by Terraform (karpenter.tf); this
-# App manages only its scaling configuration so it can be tuned via PRs.
+# PROD observability CRs — applied on the PROD cluster's Argo CD.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: redemption-karpenter
+  name: redemption-observability
   namespace: argocd
   finalizers:
     - argocd.argoproj.io/resources-finalizer
@@ -13,10 +11,10 @@ spec:
   source:
     repoURL: https://github.com/thixpin/redemption-infra.git
     targetRevision: main
-    path: k8s/karpenter
+    path: k8s/observability/overlays/prod
   destination:
     server: https://kubernetes.default.svc
-    namespace: karpenter
+    namespace: monitoring
   syncPolicy:
     automated:
       prune: true

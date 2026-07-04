@@ -76,6 +76,24 @@ variable "cluster_endpoint_public_access_cidrs" {
   default     = ["0.0.0.0/0"]
 }
 
+variable "grafana_hostname" {
+  description = "Public hostname Grafana is served on (sets GF_SERVER_ROOT_URL)"
+  type        = string
+  default     = "redemption-grafana-dev.thixpin.me"
+}
+
+variable "ecr_replication_destination_account_ids" {
+  description = "Account IDs to replicate ECR images to (set in the BUILD/dev account, e.g. [prod account]). Empty = no replication."
+  type        = list(string)
+  default     = []
+}
+
+variable "ecr_replication_source_account_id" {
+  description = "Account ID allowed to replicate images INTO this account's ECR (set in the PROD account = the build/dev account ID). Empty = no policy."
+  type        = string
+  default     = ""
+}
+
 variable "slack_webhook_url" {
   description = "Slack incoming webhook URL for Alertmanager notifications (leave empty to skip)"
   type        = string

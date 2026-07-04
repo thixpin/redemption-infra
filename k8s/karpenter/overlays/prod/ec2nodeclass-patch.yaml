@@ -1,0 +1,13 @@
+# Prod cluster: node role + discovery tags follow local.name = redemption-prod.
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: default
+spec:
+  role: "redemption-prod-karpenter-node"
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: redemption-prod
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: redemption-prod

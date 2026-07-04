@@ -5,6 +5,9 @@
 crash.log
 *.tfvars
 !*.tfvars.example
+# Per-env inputs are intentionally tracked (no secrets in them — Alertmanager
+# keys etc. go via TF_VAR_* env vars).
+!terraform/envs/*/terraform.tfvars
 .terraform.lock.hcl
 override.tf
 override.tf.json

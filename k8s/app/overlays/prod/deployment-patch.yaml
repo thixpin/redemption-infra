@@ -1,0 +1,13 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redemption-api
+  namespace: redemption
+spec:
+  template:
+    spec:
+      containers:
+        - name: redemption-api
+          env:
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "service.namespace=redemption,deployment.environment=prod"

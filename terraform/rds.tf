@@ -17,7 +17,7 @@ resource "aws_secretsmanager_secret_version" "db" {
     password = random_password.db.result
     dbname   = var.db_name
     port     = 5432
-    host = module.rds_proxy.proxy_endpoint
+    host     = module.rds_proxy.proxy_endpoint
   })
 }
 
@@ -83,7 +83,7 @@ module "aurora" {
 
   name              = "${local.name}-pg"
   engine            = "aurora-postgresql"
-  engine_mode       = "provisioned"               # required for Serverless v2
+  engine_mode       = "provisioned" # required for Serverless v2
   engine_version    = var.aurora_engine_version
   storage_encrypted = true
   kms_key_id        = aws_kms_key.rds.arn
@@ -111,10 +111,10 @@ module "aurora" {
   create_security_group  = false
   vpc_security_group_ids = [aws_security_group.rds.id]
 
-  backup_retention_period = 14
-  deletion_protection     = true
-  final_snapshot_identifier= "${local.name}-final-snapshot"
-  skip_final_snapshot     = false
+  backup_retention_period   = 14
+  deletion_protection       = true
+  final_snapshot_identifier = "${local.name}-final-snapshot"
+  skip_final_snapshot       = false
 
   performance_insights_enabled    = true
   monitoring_interval             = 60

@@ -10,10 +10,8 @@ metadata:
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
     alb.ingress.kubernetes.io/ssl-redirect: "443"
-    # Replace with your ACM certificate ARN fro thixpin.me
-    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:ap-southeast-1:801100257021:certificate/e1b6f044-bac8-435b-8826-d9ab3304ad38
-    # Associate the AWS WAF web ACL with the ALB to protect against common web exploits and bots.
-    alb.ingress.kubernetes.io/wafv2-acl-arn: arn:aws:wafv2:ap-southeast-1:801100257021:regional/webacl/redemption/702b6da4-4638-4bc7-9f7e-68fcd07b737f
+    # ACM certificate + WAF web ACL are account/env-specific — set per overlay
+    # (see overlays/<env>/ingress-patch.yaml).
     alb.ingress.kubernetes.io/healthcheck-path: /health
     alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30
 spec:

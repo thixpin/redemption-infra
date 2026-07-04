@@ -1,0 +1,30 @@
+# GitOps for the observability CRs (ServiceMonitor, PrometheusRule,
+# AlertmanagerConfig). The operators/stack themselves are installed by Terraform
+# (addons.tf); this App manages the app-specific rules so they're tunable via PRs.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: redemption-observability
+  namespace: argocd
+  finalizers:
+    - argocd.argoproj.io/resources-finalizer
+spec:
+  project: redemption
+  source:
+    repoURL: https://github.com/thixpin/redemption-infra.git
+    targetRevision: main
+    path: k8s/observability/overlays/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+  revisionHistoryLimit: 10

@@ -31,12 +31,13 @@ export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output tex
 export CLUSTER_NAME="${PROJECT}-${ENVIRONMENT}"        # redemption-dev
 ```
 
-## 1. Configure `terraform.tfvars`
+## 1. Configure the environment tfvars
 
-Set at least these in `terraform/terraform.tfvars` before applying:
+Per-environment inputs live in `terraform/envs/<env>/` (backend + tfvars).
+Set at least these in `terraform/envs/dev/terraform.tfvars` before applying:
 
 ```hcl
-# terraform/terraform.tfvars
+# terraform/envs/dev/terraform.tfvars
 cluster_admin_role_arns = ["arn:aws:iam::<acct>:role/<your-admin-or-SSO-role>"]  # gets cluster-admin
 # Optional hardening / integrations:
 # cluster_endpoint_public_access_cidrs = ["<your.ip>/32"]   # lock the API endpoint (default 0.0.0.0/0)
@@ -66,19 +67,22 @@ aws dynamodb create-table --table-name "${TF_BACKEND_TABLE}" \
   --billing-mode PAY_PER_REQUEST --region "${AWS_REGION}"
 ```
 
-Ensure `terraform/backend.hcl` matches those names (bucket / dynamodb_table / region).
+Ensure `terraform/envs/dev/backend.hcl` matches those names (bucket / dynamodb_table / region).
 
 ## 3. Provision infrastructure
 
-All Terraform lives in `terraform/` — run these from there:
+One root module, per-env backend + tfvars. For dev:
 
 ```bash
 cd terraform
-terraform init -backend-config=backend.hcl
+terraform init -backend-config=envs/dev/backend.hcl
 terraform validate
-terraform plan
-terraform apply
+terraform plan  -var-file=envs/dev/terraform.tfvars
+terraform apply -var-file=envs/dev/terraform.tfvars
 ```
+
+(Switching env in the same checkout requires `terraform init -reconfigure
+-backend-config=envs/<env>/backend.hcl` because the S3 backend changes.)
 
 This creates the VPC (3 tiers × 3 AZs), EKS, Aurora Serverless v2 + RDS Proxy,
 ECR, Karpenter (controller), and add-ons (AWS LB Controller, metrics-server,
@@ -94,8 +98,9 @@ terraform output rds_proxy_endpoint
 
 ## 4. GitHub Actions OIDC + CI role (for the app repo)
 
-Lets `redemption-app` CI push to ECR without static keys. Trust is scoped to the
-`main` branch of the app repo (see `github-actions-trust-policy.json`).
+Lets `redemption-app` CI push to ECR without static keys. Trust is scoped to
+the app repo's `develop`/`main` branches and `v*` tags (see
+`github-actions-trust-policy.json`).
 
 ```bash
 cd ..   # back to the repo root — the JSON policy docs live here
@@ -122,8 +127,9 @@ aws iam put-role-policy --role-name "${CLUSTER_NAME}-github-actions" \
 
 | Secret | Value |
 |--------|-------|
-| `AWS_CI_ROLE_ARN` | `arn:aws:iam::<acct>:role/redemption-dev-github-actions` (from step 4) |
-| `INFRA_REPO_TOKEN` | Fine-grained PAT / GitHub App token with **Contents: read/write** on `redemption-infra` (CI bumps the image tag there) |
+| `AWS_CI_ROLE_ARN` | `arn:aws:iam::<dev acct>:role/redemption-dev-github-actions` (from step 4) |
+| `AWS_CI_ROLE_ARN_PROD` | `arn:aws:iam::<prod acct>:role/redemption-prod-github-actions` — used by `deploy-prod` (release tags) to push the image into the prod ECR (SETUP §12.4) |
+| `INFRA_REPO_TOKEN` | Fine-grained PAT / GitHub App token with **Contents: read/write** on `redemption-infra` (CI bumps the image tags there) |
 
 ## 6. Configure kubectl access
 
@@ -158,14 +164,12 @@ kubectl -n argocd rollout status deploy/argocd-server
 #   argocd repo add https://github.com/<org>/redemption-infra.git --username <u> --password <token>
 # (or create an argocd repo Secret). Public repos need nothing.
 
-# Apply the Argo CD project + Applications (they point at redemption-infra/main)
+# Apply the Argo CD project + the DEV application set (per-cluster sets live
+# in argocd/dev and argocd/prod — apply each on its own cluster)
 kubectl apply -f argocd/project.yaml
-kubectl apply -f argocd/application-app-dev.yaml
-kubectl apply -f argocd/application-karpenter.yaml
-kubectl apply -f argocd/application-observability.yaml
+kubectl apply -f argocd/dev/
 
-# Argo CD UI ingress (joins the shared "redemption-admin" ALB with Grafana)
-kubectl apply -f argocd/ingress.yaml
+# (argocd/dev/ingress.yaml joins the shared "redemption-admin" ALB with Grafana)
 
 # HPA health-check override (stops Healthy<->Degraded flapping on rollouts)
 kubectl apply -f argocd/argocd-cm-health.yaml
@@ -179,16 +183,18 @@ Argo CD now reconciles: Karpenter NodePool/EC2NodeClass, the app (namespace
 
 ## 8. First application deploy
 
-The dev overlay's image tag is a placeholder until CI publishes one:
+The dev overlay's image tag is a placeholder until CI publishes one. Dev
+deploys from the app repo's **`develop`** branch (`deploy-dev.yaml`):
 
 ```bash
 # In the redemption-app repo:
-git push origin main
+git push origin develop
 ```
 
 CI: tests → **multi-arch build (arm64 + amd64)** → Trivy scan → push
-`:<sha>` to ECR → bump `k8s/app/overlays/dev/kustomization.yaml` in this repo →
-Argo CD syncs → pods roll out.
+`:<sha>` to the dev ECR → bump `k8s/app/overlays/dev/kustomization.yaml` in
+this repo → Argo CD syncs → pods roll out. (PRs run tests only, via `ci.yaml`;
+prod releases are `v*` tags on `main`, via `deploy-prod.yaml` — see §12.)
 
 ```bash
 kubectl -n redemption get pods -w
@@ -261,6 +267,56 @@ kubectl -n argocd get applications                     # all Synced / Healthy
 curl -s https://redemption-dev.thixpin.me/api/codes
 ```
 
+## 12. PROD environment (separate AWS account)
+
+> **Full prod runbook: [`PROD-SETUP.md`](./PROD-SETUP.md)** (includes the
+> first-sync DB-secret bootstrap and prod-specific gotchas). Summary below.
+
+Prod reuses the same root module and manifests — everything env-specific lives
+in `terraform/envs/prod/` and the `overlays/prod` Kustomize dirs. Bootstrap
+order (with **prod-account** credentials):
+
+1. **Fill the placeholders** (grep for `<PROD_ACCOUNT_ID>`):
+   `terraform/envs/prod/{backend.hcl,terraform.tfvars}`,
+   `k8s/app/overlays/prod/*`, `k8s/observability/overlays/prod/*`,
+   `argocd/prod/ingress.yaml`. Prod also needs its own ACM wildcard cert and
+   (optionally) WAF web ACL — create those first and paste the ARNs.
+2. **State backend** — repeat §2 in the prod account (`ENVIRONMENT=prod`).
+3. **Terraform**:
+   ```bash
+   cd terraform
+   terraform init -reconfigure -backend-config=envs/prod/backend.hcl
+   terraform apply -var-file=envs/prod/terraform.tfvars
+   ```
+4. **Prod CI role (image build + push)** — `deploy-prod.yaml` builds the tagged
+   commit (multi-arch), Trivy-scans it, and pushes straight to the **prod
+   account's ECR**. Wire it up once:
+   - In the **prod account**: create the GitHub OIDC provider + a
+     `redemption-prod-github-actions` role (repeat §4 with prod credentials —
+     the committed `github-actions-trust-policy.json` allows the
+     `develop`/`main` branches and `v*` tags).
+   - Add repo secret `AWS_CI_ROLE_ARN_PROD` in `redemption-app` (see §5).
+   - The **dev** CI role's trust must allow `refs/heads/develop` (dev deploys
+     moved from main — update the role with the same JSON).
+
+   *(ECR cross-account replication remains available as an alternative via the
+   `ecr_replication_*` Terraform variables.)*
+5. **Argo CD** — prod cluster runs its own (repeat §7 with prod kubeconfig), then:
+   ```bash
+   kubectl apply -f argocd/project.yaml
+   kubectl apply -f argocd/prod/
+   kubectl apply -f argocd/argocd-cm-health.yaml
+   ```
+6. **Deploys** — gated by release tags, not main:
+   ```bash
+   git tag v1.0.0 <main-commit-sha> && git push --tags
+   # CI bumps k8s/app/overlays/prod newTag -> prod Argo CD syncs
+   ```
+7. **DNS** — CNAMEs matching the prod overlay hosts: `redemption-api`,
+   `redemption-grafana`, `redemption-argocd` → the prod ALB hostnames
+   (`terraform output app_alb_hostname` / `admin_alb_hostname` against the
+   prod state).
+
 ## Operations notes & gotchas
 
 - **NetworkPolicy enforcement** is enabled on the VPC CNI. If you change
@@ -281,7 +337,8 @@ curl -s https://redemption-dev.thixpin.me/api/codes
 
 ```bash
 # Remove Argo CD Applications first so finalizers clean up ALBs/targets, then:
-cd terraform && terraform destroy
+cd terraform && terraform destroy -var-file=envs/dev/terraform.tfvars
+# (prod: init -reconfigure with envs/prod/backend.hcl and use the prod var-file)
 ```
 
 > Aurora has `deletion_protection = true` and takes a final snapshot; disable/adjust

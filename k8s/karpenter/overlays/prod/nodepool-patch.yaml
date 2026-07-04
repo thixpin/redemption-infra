@@ -1,0 +1,8 @@
+# Prod: higher capacity ceiling for the 10x flash-sale burst.
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: default
+spec:
+  limits:
+    cpu: "2000"

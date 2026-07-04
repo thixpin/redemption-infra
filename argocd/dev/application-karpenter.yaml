@@ -1,10 +1,10 @@
-# GitOps for the observability CRs (ServiceMonitor, PrometheusRule,
-# AlertmanagerConfig). The operators/stack themselves are installed by Terraform
-# (addons.tf); this App manages the app-specific rules so they're tunable via PRs.
+# Karpenter NodePool + EC2NodeClass (cluster-scoped) managed via GitOps.
+# The Karpenter controller itself is installed by Terraform (karpenter.tf); this
+# App manages only its scaling configuration so it can be tuned via PRs.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: redemption-observability
+  name: redemption-karpenter
   namespace: argocd
   finalizers:
     - argocd.argoproj.io/resources-finalizer
@@ -13,10 +13,10 @@ spec:
   source:
     repoURL: https://github.com/thixpin/redemption-infra.git
     targetRevision: main
-    path: k8s/observability
+    path: k8s/karpenter/overlays/dev
   destination:
     server: https://kubernetes.default.svc
-    namespace: monitoring
+    namespace: karpenter
   syncPolicy:
     automated:
       prune: true

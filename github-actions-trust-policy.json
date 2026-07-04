@@ -4,13 +4,19 @@
     {   
       "Effect": "Allow",
       "Principal": {
-        "Federated": "arn:aws:iam::801100257021:oidc-provider/token.actions.githubusercontent.com"
+        "Federated": "arn:aws:iam::770385967466:oidc-provider/token.actions.githubusercontent.com"
       },
       "Action": "sts:AssumeRoleWithWebIdentity",
       "Condition": {
         "StringEquals": {
-          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-          "token.actions.githubusercontent.com:sub": "repo:thixpin/redemption-app:ref:refs/heads/main"
+          "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+        },
+        "StringLike": {
+          "token.actions.githubusercontent.com:sub": [
+            "repo:thixpin/redemption-app:ref:refs/heads/develop",
+            "repo:thixpin/redemption-app:ref:refs/heads/main",
+            "repo:thixpin/redemption-app:ref:refs/tags/v*"
+          ]
         }
       }
     }
