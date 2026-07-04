@@ -13,4 +13,4 @@ patches:
 images:
   - name: 801100257021.dkr.ecr.ap-southeast-1.amazonaws.com/redemption/redemption-api
     newName: 770385967466.dkr.ecr.ap-southeast-1.amazonaws.com/redemption/redemption-api
-    newTag: bootstrap
+    newTag: 814297084a52
