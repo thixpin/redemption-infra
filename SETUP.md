@@ -333,13 +333,32 @@ order (with **prod-account** credentials):
   they configure the single shared ALB. Changing `group.name` replaces the ALB
   (new hostname → update the CNAMEs).
 
-## Teardown
+## Teardown (dev)
+
+Delete k8s-managed AWS resources (ALBs, Karpenter nodes) **before** the
+cluster, or they orphan and keep billing:
 
 ```bash
-# Remove Argo CD Applications first so finalizers clean up ALBs/targets, then:
-cd terraform && terraform destroy -var-file=envs/dev/terraform.tfvars
-# (prod: init -reconfigure with envs/prod/backend.hcl and use the prod var-file)
+# 1. Argo CD apps first — finalizers remove workloads, ALBs, Karpenter nodes
+kubectl delete -f argocd/dev/ --ignore-not-found
+kubectl delete ingress -A --all --wait=false
+kubectl delete -f argocd/project.yaml --ignore-not-found
+kubectl -n monitoring delete pvc --all --wait=false
+
+# 2. Unblock protected resources
+aws rds modify-db-cluster --db-cluster-identifier redemption-dev-pg \
+  --no-deletion-protection --apply-immediately --region ap-southeast-1
+aws ecr delete-repository --repository-name redemption/redemption-api \
+  --region ap-southeast-1 --force
+
+# 3. Destroy (~20-30 min)
+cd terraform
+terraform init -reconfigure -backend-config=envs/dev/backend.hcl
+terraform destroy -var-file=envs/dev/terraform.tfvars
 ```
 
-> Aurora has `deletion_protection = true` and takes a final snapshot; disable/adjust
-> in `terraform/rds.tf` if you need an unattended destroy.
+Then remove leftovers by hand: CI IAM role, state bucket + lock table (last),
+Cloudflare CNAMEs. If destroy hangs on the VPC, an ALB/ENI survived step 1 —
+delete it and re-run. The DB secret keeps a 7-day recovery window (blocks
+name reuse; `delete-secret --force-delete-without-recovery` to skip). Prod
+mirrors this with the prod backend/var-file.

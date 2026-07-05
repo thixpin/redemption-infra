@@ -7,7 +7,10 @@ same cluster, pipelines, and guardrails.
 
 - **Full setup:** [`SETUP.md`](./SETUP.md) — one-time bootstrap runbook (dev).
 - **Prod setup:** [`PROD-SETUP.md`](./PROD-SETUP.md) — separate-account prod bootstrap.
-- **Design rationale:** [`docs/DESIGN.md`](./docs/DESIGN.md) + [`docs/architecture.drawio`](./docs/architecture.drawio).
+- **Design rationale:** [`docs/DESIGN.md`](./docs/DESIGN.md) ([PDF](./docs/DESIGN.pdf)) + [`docs/architecture.drawio`](./docs/architecture.drawio).
+
+## Architecture Diagram
+![image](./docs/architecture.svg)
 
 ## What you get
 
